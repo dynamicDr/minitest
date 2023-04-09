@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
 import torch_ac
-import utils
+import matplotlib.pyplot as plt
 
 
 # Function from https://github.com/ikostrikov/pytorch-a2c-ppo-acktr/blob/master/model.py
@@ -14,6 +14,38 @@ def init_params(m):
         m.weight.data *= 1 / torch.sqrt(m.weight.data.pow(2).sum(1, keepdim=True))
         if m.bias is not None:
             m.bias.data.fill_(0)
+
+class QModel(nn.Module):
+
+    def __init__(self, obs_space, action_space):
+        super(QModel, self).__init__()
+        n, m, _ = obs_space['image']
+        self.conv1 = nn.Conv2d(3, 16, (2, 2))
+        self.conv2 = nn.Conv2d(16, 32, (2, 2))
+        self.conv3 = nn.Conv2d(32, 64, (2, 2))
+
+        self.image_conv = nn.Sequential(
+            self.conv1,
+            nn.ReLU(),
+            nn.MaxPool2d((2, 2)),
+            self.conv2,
+            nn.ReLU(),
+            self.conv3,
+            nn.ReLU()
+        )
+        self.embedding_size = ((n-1)//2-2)*((m-1)//2-2)*64
+
+        self.head = nn.Sequential(
+            nn.Linear(self.embedding_size, 64),
+            nn.Tanh(),
+            nn.Linear(64, action_space.n)
+        )
+
+
+    def forward(self, obs):
+        obs = obs.image.permute(0,3,1,2)
+        obs = self.image_conv(obs)
+        return self.head(obs.reshape(obs.size(0), -1))
 
 
 class ACModel(nn.Module, torch_ac.RecurrentACModel):
@@ -56,18 +88,14 @@ class ACModel(nn.Module, torch_ac.RecurrentACModel):
 
         # Define actor's model
         self.actor = nn.Sequential(
-            nn.Linear(self.embedding_size, 128),
-            nn.Tanh(),
-            nn.Linear(128, 64),  # 新增的线性层
+            nn.Linear(self.embedding_size, 64),
             nn.Tanh(),
             nn.Linear(64, action_space.n)
         )
 
         # Define critic's model
         self.critic = nn.Sequential(
-            nn.Linear(self.embedding_size, 128),
-            nn.Tanh(),
-            nn.Linear(128, 64),  # 新增的线性层
+            nn.Linear(self.embedding_size, 64),
             nn.Tanh(),
             nn.Linear(64, 1)
         )
@@ -85,6 +113,7 @@ class ACModel(nn.Module, torch_ac.RecurrentACModel):
 
     def forward(self, obs, memory):
         x = obs.image.transpose(1, 3).transpose(2, 3)
+
         x = self.image_conv(x)
         x = x.reshape(x.shape[0], -1)
 

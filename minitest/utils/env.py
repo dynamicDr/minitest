@@ -1,7 +1,9 @@
-import gymnasium as gym
+import gym
+import gym_minigrid
 
+print(gym_minigrid.__file__)
 
-def make_env(env_key, seed=None, render_mode=None):
-    env = gym.make(env_key, render_mode=render_mode)
-    env.reset(seed=seed)
+def make_env(env_key, seed=None):
+    env = gym.make(env_key)
+    env.seed(seed)
     return env
